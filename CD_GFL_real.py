@@ -8,7 +8,6 @@ import random
 import os
 import datetime
 from CD_evaluation import evaluation_real, data_split
-from plot_county import cal_map
 torch.set_printoptions(precision=5)
 
 
@@ -37,7 +36,6 @@ def parse_args():
   
   parser.add_argument('--epoch', default=50) # ADMM iteration
   parser.add_argument('--decoder_iteration', default=20)
-  parser.add_argument('--nu_iteration', default=20)
   parser.add_argument('--decoder_lr', default=0.0001)
   parser.add_argument('--decoder_thr', default=0.0001)
   #parser.add_argument('--iter_thr', default=5)
@@ -54,7 +52,7 @@ def parse_args():
 
 
 
-args = parse_args(); print(args)
+args = parse_args()
 if torch.cuda.is_available():
   device = torch.device('cuda:0')
 else:
@@ -100,10 +98,22 @@ elif args.use_data == 'word':
   y_data = torch.tensor(y_data.values, dtype=torch.float32) # torch
 
   output_dir = os.path.join("result/word_{}".format(timestamp))
+
+elif args.use_data == 'traffic':
+  print('[INFO] num_node = {}'.format(args.num_node))
+  args.data_dir = './data/LA_traffic/'
+  remove_ratio = 0.1 # model selection
+  
+  data = torch.load(args.data_dir +"metr_la_daily_standardized.pt")
+  y_data = data["Y"]
+  adj_matrix = data["adj"].numpy()
+
+  output_dir = os.path.join("result/traffic_{}".format(timestamp))
+  
   
 
 
-args.output_dir = output_dir
+args.output_dir = output_dir; print(args)
 os.makedirs(output_dir, exist_ok=True)
 with open(output_dir+"/args.txt", 'w') as f:
     for arg, value in vars(args).items():
@@ -326,10 +336,6 @@ def learn_one_seq_penalty(args, y_data, removed_y_data, removed_nodes,\
         plt.close()
       '''
         
-  
-  plt.plot(loglik_train_holder[1:])
-  plt.savefig( output_dir + '/loglik_pen{}'.format(pen_iter) + '.png' ) 
-  plt.close()
 
   if CV:
     mu_removed = mu[removed_nodes]
@@ -400,7 +406,4 @@ clusters, cluster_label = learn_one_seq_penalty(args, y_data, None, None, source
 
 
 print('[INFO] clusters:', clusters)
-
-if args.use_data != 'word':
-  cal_map(args, cluster_label, annotate=True, save=True)
 
