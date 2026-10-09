@@ -1,6 +1,12 @@
+
 library(NAC)
 library(reticulate)
-
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(tidyverse)
+library(readr)
+library(igraph)
 
 scenario <- "s2"  ##### "s1", "s2"
 num_node <- "196" ##### s1: "120", "210", s2: "144", "196"
@@ -37,4 +43,84 @@ dir.create( paste0("result/c5_",scenario,"_n",num_node), showWarnings = FALSE)
 write.csv(output_label, 
           paste0("result/c5_",scenario,"_n",num_node,"/output_label.csv"),
           row.names = F)
+
+
+
+###############
+# CA data map #
+###############
+true_K = 10
+CA_adj <- as.matrix(read.csv("data/CA_data/CA_graph.csv"))
+colnames(CA_adj) <- NULL
+# CA_adj <- (CA_adj + t(CA_adj))/2
+# mode(CA_adj) <- "numeric"
+CA_data <- as.matrix(read.csv("data/CA_data/CA_time_series.csv"))
+
+
+set.seed(42) # different seeds, different results
+CA_label <- SDP(CA_adj, CA_data, lambda = 0.5, K = true_K, 
+                alpha = 0.5, rho = 1, TT = 100, tol = 5)
+
+
+shapefile_path <- "data/CA_data/California_Counties.shp"
+ca_map <- st_read(shapefile_path) # ca_map$NAME gives county names
+ca_map$NAME <- gsub("(?i) County", "", ca_map$NAME, perl = TRUE)
+
+ca_map$cluster <- CA_label # add label to map
+
+tableau20 <- c(
+  "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD",
+  "#8C564B", "#E377C2", "#7F7F7F", "#BCBD22", "#17BECF",
+  "#AEC7E8", "#FFBB78", "#98DF8A", "#FF9896", "#C5B0D5",
+  "#C49C94", "#F7B6D2", "#C7C7C7", "#DBDB8D", "#9EDAE5")
+
+cluster_levels <- sort(unique(ca_map$cluster))
+cluster_colors <- setNames(tableau20[1:length(cluster_levels)], cluster_levels)
+
+
+p_map <- ggplot(ca_map) +
+  geom_sf(aes(fill = as.factor(cluster)), color = "white", size = 0.2) +
+  geom_sf_text(aes(label = NAME), size = 1.5, color = "black") +
+  scale_fill_manual(name = "Cluster", values = cluster_colors) +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),      
+    axis.text = element_blank(),       
+    axis.ticks = element_blank(),      
+    panel.grid = element_blank(),
+    legend.position = "none"
+  );p_map
+
+
+##############
+# LA Traffic #
+##############
+true_k = 5
+
+A <- as.matrix( read.csv(file.choose(), header = FALSE, check.names = FALSE) )
+storage.mode(A) <- "numeric"
+Traffic_adj <- 1L * ((A != 0) | (t(A) != 0))
+dimnames(Traffic_adj) <- NULL
+
+
+Traffic_data <- as.matrix(read.csv(file.choose(), header=FALSE))
+
+
+labels <- SDP(Traffic_adj, Traffic_data, lambda = 0.5, K = true_k, 
+              alpha = 0.5, rho = 1, TT = 100, tol = 5)
+
+
+cluster_nodes <- split(
+  0:(length(labels) - 1),
+  labels
+)
+
+
+writeLines(
+  sapply(cluster_nodes, function(nodes) {
+    paste(nodes, collapse = " ")
+  }),
+  "traffic_labels_c4.txt"
+)
+
 
